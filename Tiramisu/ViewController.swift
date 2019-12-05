@@ -99,16 +99,36 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
                 guard self.ready else { return }
                 // get the outputs from the model
                 let outputs = finishedRequest.results as? [VNCoreMLFeatureValueObservation]
+                
                 // get the probabilities as the first output of the model
                 guard let softmax = outputs?[0].featureValue.multiArrayValue else {
                     print("failed to extract output from model")
                     return
                 }
+                print("Out has arrivied")
+               /* let height = softmax.shape[1].intValue
+                let width = softmax.shape[2].intValue
+                let rawPtr = OpaquePointer(softmax.dataPointer)
+                let features  = UnsafeMutablePointer<Float32>(rawPtr)
+                for i in 0...width{
+                    for j in 0...height{
+                        var val = features[i*width + j];
+                        
+                        //softmax.dataPointer[i*width + j]
+                    }
+                }
+                print("Final output: finished")*/
+                
+                
+                
+                
+                
+                
                 // get the dimensions of the probability tensor
                 let channels = softmax.shape[0].intValue
                 let height = softmax.shape[1].intValue
                 let width = softmax.shape[2].intValue
-                                
+                
                 // create an image for the softmax outputs
                 let desc = MPSImageDescriptor(channelFormat: .float32,
                                               width: width,
@@ -119,8 +139,21 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
                                  dataLayout: .featureChannelsxHeightxWidth,
                                  imageIndex: 0)
                 
+                let arrayMl = try! MLMultiArray(shape: [12,softmax.shape[1],softmax.shape[2]], dataType: .float32)
+                probs.readBytes(arrayMl.dataPointer, dataLayout: .featureChannelsxHeightxWidth, imageIndex: 0)
+                let images = self.processSoftmax(arrayMl)
+                // update the image on the UI thread
+                DispatchQueue.main.async {
+                    self.segmentation.image = images
+                    let fps = -1 / self.time.timeIntervalSinceNow
+                    self.time = Date()
+                    self.framerate.text = "\(fps)"
+                }
+            self.ready = true
+            //self.ready = false
+                
                 // create an output image for the Arg Max output
-                let desc1 = MPSImageDescriptor(channelFormat: .float32,
+               /* let desc1 = MPSImageDescriptor(channelFormat: .float32,
                                                width: width,
                                                height: height,
                                                featureChannels: 1)
@@ -150,7 +183,7 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
                     self.ready = true
                 })
                 self.ready = false
-                buffer?.commit()
+                buffer?.commit()*/
 
             }
             // set the input image size to be a scaled version
@@ -238,5 +271,69 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
             popup_alert(self, title: "Inference Error", message: message)
         }
     }
+    
+    
+    private var mm = false
+    func processSoftmax(_ _probs: MLMultiArray)->UIImage{
+        let label_map = [
+            0:  [255, 0, 0],
+            1:  [70, 70, 70],
+            2:  [0, 0, 142],
+            3:  [153, 153, 153],
+            4:  [190, 153, 153],
+            5:  [220, 20, 60],
+            6:  [128, 64, 128],
+            7:  [244, 35, 232],
+            8:  [220, 220, 0],
+            9:  [70, 130, 180],
+            10: [107, 142, 35],
+            11: [0, 0, 0]
+        ]
+        
+        // convert the MLMultiArray to a MultiArray
+        var codes = MultiArray<Float32>(_probs)
+        // get the shape information from the probs
+        let height = codes.shape[1]
+        let width = codes.shape[2]
+        // initialize some bytes to store the image in
+        var bytes = [UInt8](repeating: 255, count: height * width * 4)
+        // iterate over the pixels in the output probs
+        for h in 0 ..< height {
+            for w in 0 ..< width {
+                // get the array offset for this word
+                let offset = h * width * 4 + w * 4
+                var ch1 = codes[0, h, w]
+                //ch1 = ch1/255.0
+                let ch2 = 1.0-ch1
+                
+                if(ch1 < ch2){
+                    let rgb = label_map[0]
+                    bytes[offset + 0] = UInt8(rgb![0])
+                    bytes[offset + 1] = UInt8(rgb![1])
+                    bytes[offset + 2] = UInt8(rgb![2])
+                }
+                else{
+                    let rgb = label_map[1]
+                    bytes[offset + 0] = UInt8(rgb![0])
+                    bytes[offset + 1] = UInt8(rgb![1])
+                    bytes[offset + 2] = UInt8(rgb![2])
+                }
+            
+            }
+        }
+        print("Finish Frame: finished")
+        // create a UIImage from the byte array
+        return UIImage.fromByteArray(bytes, width: width, height: height,
+                                     scale: 0, orientation: .up,
+                                     bytesPerRow: width * 4,
+                                     colorSpace: CGColorSpaceCreateDeviceRGB(),
+                                     alphaInfo: .premultipliedLast)!
+        
+        
+        
+    }
+    
+    
+    
     
 }

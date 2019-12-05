@@ -41,8 +41,10 @@ func codesToImage(_ _probs: MLMultiArray) -> UIImage? {
             // get the array offset for this word
             let offset = h * width * 4 + w * 4
             // get the RGB value for the highest probability class
+            //let rgb1 = label_map[Int(codes[1,h,w])]
             let rgb = label_map[Int(codes[0, h, w])]
-            // set the bytes to the RGB value and alpha of 1.0 (255)
+            // set the bytes to the RGB value and alpha of 1.0 (255)''
+            //print("Values are "+(codes[0,h,w]).description+" and "+(codes[1,h,w]).description);
             bytes[offset + 0] = UInt8(rgb![0])
             bytes[offset + 1] = UInt8(rgb![1])
             bytes[offset + 2] = UInt8(rgb![2])
